@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>客戶地址記錄與 Google Maps 導航助手</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    body {
+      font-family: 'Noto Sans TC', system-ui, -apple-system, sans-serif;
+    }
+  </style>
+</head>
+<body class="bg-slate-50 min-h-screen text-slate-800">
+  <!-- 頂部導航列 -->
+  <header class="bg-blue-600 text-white shadow-md sticky top-0 z-30">
+    <div class="max-w-4xl mx-auto px-4 py-3 sm:py-4 flex flex-wrap items-center justify-between gap-3">
+      <div class="flex items-center space-x-2.5">
+        <div class="bg-white/20 p-2 rounded-xl backdrop-blur-sm">
+          <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+          </svg>
+        </div>
+        <div>
+          <h1 class="text-lg sm:text-xl font-bold tracking-tight">客戶導航助手</h1>
+          <p class="text-xs text-blue-100">一鍵 Google Map 導航與客戶管理</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button id="btnExport" title="備份 / 匯入資料" class="p-2 text-white/90 hover:bg-white/15 rounded-lg transition-colors text-xs flex items-center gap-1 border border-white/20">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4"/>
+          </svg>
+          <span class="hidden sm:inline">備份資料</span>
+        </button>
+        <button id="btnOpenAddModal" class="bg-amber-400 hover:bg-amber-500 text-slate-900 font-bold px-3.5 py-2 rounded-lg shadow transition-all duration-150 flex items-center gap-1.5 text-sm active:scale-95">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+          </svg>
+          <span>新增客戶</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- 主內容區 -->
+  <main class="max-w-4xl mx-auto px-4 py-5 space-y-4">
+    <!-- 搜尋與快速統計欄 -->
+    <div class="bg-white p-3.5 sm:p-4 rounded-xl shadow-sm border border-slate-200/80 flex flex-col sm:flex-row gap-3 items-center justify-between">
+      <div class="relative w-full sm:w-80">
+        <div class="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-slate-400">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/>
+          </svg>
+        </div>
+        <input 
+          type="text" 
+          id="searchInput" 
+          placeholder="搜尋姓名、地址或電話..." 
+          class="w-full pl-9 pr-8 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+        />
+        <button id="btnClearSearch" class="hidden absolute inset-y-0 right-0 pr-2.5 flex items-center text-slate-400 hover:text-slate-600">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="flex items-center justify-between w-full sm:w-auto text-xs text-slate-500">
+        <span id="customerCountLabel">正在載入客戶清單...</span>
+      </div>
+    </div>
+
+    <!-- 客戶列表容器 -->
+    <div id="customerList" class="space-y-3">
+      <!-- 動態載入客戶卡片 -->
+    </div>
+
+    <!-- 空清單提示 -->
+    <div id="emptyState" class="hidden bg-white rounded-2xl border border-dashed border-slate-300 p-8 text-center space-y-3">
+      <div class="w-14 h-14 bg-blue-50 text-blue-500 rounded-full flex items-center justify-center mx-auto">
+        <svg class="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
+        </svg>
+      </div>
+      <h3 class="text-base font-semibold text-slate-700" id="emptyTitle">目前尚無客戶資料</h3>
+      <p class="text-sm text-slate-500 max-w-sm mx-auto" id="emptyDesc">
+        點擊上方「新增客戶」按鈕，立即記錄第一筆客戶姓名與地址！
+      </p>
+      <div class="pt-2">
+        <button id="btnEmptyAdd" class="bg-blue-600 hover:bg-blue-700 text-white font-medium px-4 py-2 rounded-lg text-sm transition-all shadow-sm">
+          ＋ 新增第一位客戶
+        </button>
+      </div>
+    </div>
+  </main>
+
+  <!-- 浮動新增按鈕 (手機版右下角便利按鈕) -->
+  <button id="floatingAddBtn" class="sm:hidden fixed bottom-6 right-6 w-14 h-14 bg-amber-400 text-slate-900 rounded-full shadow-lg flex items-center justify-center active:scale-95 transition-transform z-20">
+    <svg class="w-7 h-7" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4"/>
+    </svg>
+  </button>
+
+  <!-- 新增/編輯客戶 Modal 對話框 -->
+  <div id="customerModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden animate-in fade-in duration-200">
+      <div class="px-5 py-4 border-b border-slate-100 flex items-center justify-between bg-slate-50">
+        <h2 id="modalTitle" class="text-base font-bold text-slate-800 flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-blue-600"></span>
+          新增客戶
+        </h2>
+        <button id="btnCloseModal" class="text-slate-400 hover:text-slate-600 p-1 rounded-lg">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <form id="customerForm" class="p-5 space-y-4">
+        <input type="hidden" id="customerId" value="">
+
+        <div>
+          <label for="customerName" class="block text-xs font-semibold text-slate-700 mb-1">
+            客戶姓名 <span class="text-red-500">*</span>
+          </label>
+          <input 
+            type="text" 
+            id="customerName" 
+            required 
+            placeholder="例如：陳先生、王大明"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+          >
+        </div>
+
+        <div>
+          <label for="customerAddress" class="block text-xs font-semibold text-slate-700 mb-1">
+            客戶地址 <span class="text-red-500">*</span>
+          </label>
+          <textarea 
+            id="customerAddress" 
+            required 
+            rows="2" 
+            placeholder="例如：台北市信義區信義路五段7號 (包含縣市與街道門牌更精確)"
+            class="w-full px-3.5 py-2 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all resize-none"
+          ></textarea>
+        </div>
+
+        <div>
+          <label for="customerPhone" class="block text-xs font-semibold text-slate-700 mb-1">
+            聯絡電話 <span class="text-slate-400 font-normal">(選填)</span>
+          </label>
+          <input 
+            type="tel" 
+            id="customerPhone" 
+            placeholder="例如：0912-345-678"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+          >
+        </div>
+
+        <div>
+          <label for="customerNotes" class="block text-xs font-semibold text-slate-700 mb-1">
+            備註資訊 <span class="text-slate-400 font-normal">(選填，例如：門鈴號碼、停車地點)</span>
+          </label>
+          <input 
+            type="text" 
+            id="customerNotes" 
+            placeholder="例如：到門口先電話聯絡、請走後門電梯"
+            class="w-full px-3.5 py-2.5 text-sm bg-slate-50 border border-slate-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:bg-white transition-all"
+          >
+        </div>
+
+        <div class="pt-2 flex items-center justify-end gap-2 border-t border-slate-100">
+          <button 
+            type="button" 
+            id="btnCancelForm"
+            class="px-4 py-2 text-sm text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+          >
+            取消
+          </button>
+          <button 
+            type="submit" 
+            class="px-5 py-2 text-sm bg-blue-600 hover:bg-blue-700 text-white font-medium rounded-lg shadow-sm transition-all"
+          >
+            儲存客戶
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- 刪除確認 Modal 對話框 -->
+  <div id="deleteModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-sm overflow-hidden p-5 space-y-4">
+      <div class="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto">
+        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+        </svg>
+      </div>
+
+      <div class="text-center space-y-1">
+        <h3 class="text-base font-bold text-slate-800">確定要刪除這筆客戶資料？</h3>
+        <p class="text-sm text-slate-500" id="deleteTargetInfo">刪除後將無法復原。</p>
+      </div>
+
+      <div class="flex items-center justify-center gap-3 pt-2">
+        <button id="btnCancelDelete" class="w-full py-2 text-sm font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition-colors">
+          取消
+        </button>
+        <button id="btnConfirmDelete" class="w-full py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 rounded-lg shadow-sm transition-colors">
+          確認刪除
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 備份/匯出/匯入 Modal -->
+  <div id="backupModal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 hidden">
+    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden p-5 space-y-4">
+      <div class="flex items-center justify-between border-b border-slate-100 pb-3">
+        <h3 class="font-bold text-slate-800">資料備份與搬遷</h3>
+        <button id="btnCloseBackup" class="text-slate-400 hover:text-slate-600">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="space-y-3 text-sm text-slate-600">
+        <p>所有資料預設保存在目前瀏覽器中（localStorage）。您可隨時匯出備份檔案，以便換手機或換電腦時匯入使用。</p>
+        
+        <div class="flex flex-col gap-2 pt-2">
+          <button id="btnExportJSON" class="w-full py-2.5 px-4 bg-blue-50 hover:bg-blue-100 text-blue-700 font-medium rounded-lg border border-blue-200 flex items-center justify-center gap-2 transition-colors">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/>
+            </svg>
+            下載客戶資料備份 (JSON)
+          </button>
+
+          <label class="w-full py-2.5 px-4 bg-slate-50 hover:bg-slate-100 text-slate-700 font-medium rounded-lg border border-slate-200 flex items-center justify-center gap-2 transition-colors cursor-pointer text-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/>
+            </svg>
+            從備份檔匯入 (JSON)
+            <input type="file" id="fileImport" accept=".json" class="hidden">
+          </label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast 提示通知組件 -->
+  <div id="toast" class="fixed top-5 right-5 z-50 bg-slate-900 text-white px-4 py-2.5 rounded-xl shadow-xl flex items-center gap-2 text-sm transition-all duration-300 opacity-0 pointer-events-none translate-y-[-10px]">
+    <span id="toastIcon"></span>
+    <span id="toastMsg">通知訊息</span>
+  </div>
+
+  <script>
+    // 預設示範資料
+    const DEFAULT_CUSTOMERS = [
+      {
+        id: 'c1',
+        name: '王小明',
+        address: '台北市信義區信義路五段7號 (台北101)',
+        phone: '0912-345-678',
+        notes: '平日下午2點後在家，抵達請按門鈴',
+        createdAt: Date.now() - 3600000 * 24
+      },
+      {
+        id: 'c2',
+        name: '林怡君',
+        address: '新北市板橋區縣民大道二段7號 (板橋車站)',
+        phone: '0988-123-456',
+        notes: '大樓有管理室，請先登記換證',
+        createdAt: Date.now() - 3600000 * 12
+      },
+      {
+        id: 'c3',
+        name: '張家豪',
+        address: '台中市西屯區臺灣大道三段99號 (台中市政府)',
+        phone: '0922-987-654',
+        notes: '門口可暫停卸貨',
+        createdAt: Date.now() - 3600000 * 4
+      }
+    ];
+
+    const STORAGE_KEY = 'CUSTOMER_NAVIGATOR_DATA_V1';
+
+    let customers = [];
+    let pendingDeleteId = null;
+
+    // 初始化載入資料
+    function initData() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          customers = JSON.parse(saved);
+        } catch (e) {
+          console.error('解析資料失敗，載入範例資料', e);
+          customers = [...DEFAULT_CUSTOMERS];
+          saveData();
+        }
+      } else {
+        // 第一次使用提供示範資料
+        customers = [...DEFAULT_CUSTOMERS];
+        saveData();
+      }
+      renderCustomerList();
+    }
+
+    // 儲存至 localStorage
+    function saveData() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(customers));
+    }
+
+    // 顯示 Toast 訊息
+    function showToast(message, type = 'success') {
+      const toast = document.getElementById('toast');
+      const toastMsg = document.getElementById('toastMsg');
+      const toastIcon = document.getElementById('toastIcon');
+
+      toastMsg.textContent = message;
+      if (type === 'success') {
+        toastIcon.innerHTML = `<svg class="w-4 h-4 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>`;
+      } else if (type === 'error') {
+        toastIcon.innerHTML = `<svg class="w-4 h-4 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>`;
+      } else {
+        toastIcon.innerHTML = `<svg class="w-4 h-4 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>`;
+      }
+
+      toast.classList.remove('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'pointer-events-none', 'translate-y-[-10px]');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 2500);
+    }
+
+    // Google Map 導航連結生成
+    function getGoogleMapsNavigationUrl(address) {
+      // 官方標準 Google Maps 導航 API 格式：若在手機上會自動喚醒 Google Maps App 開啟導航
+      return `https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(address)}`;
+    }
+
+    // 複製地址到剪貼簿
+    window.copyAddress = function(address) {
+      navigator.clipboard.writeText(address).then(() => {
+        showToast('地址已複製到剪貼簿！');
+      }).catch(() => {
+        // 降級方式
+        const textarea = document.createElement('textarea');
+        textarea.value = address;
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textarea);
+        showToast('地址已複製到剪貼簿！');
+      });
+    };
+
+    // 開啟編輯 Modal
+    window.editCustomer = function(id) {
+      const c = customers.find(item => item.id === id);
+      if (!c) return;
+
+      document.getElementById('modalTitle').innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-600"></span> 編輯客戶資料';
+      document.getElementById('customerId').value = c.id;
+      document.getElementById('customerName').value = c.name;
+      document.getElementById('customerAddress').value = c.address;
+      document.getElementById('customerPhone').value = c.phone || '';
+      document.getElementById('customerNotes').value = c.notes || '';
+
+      openModal('customerModal');
+    };
+
+    // 觸發刪除流程
+    window.askDelete = function(id) {
+      const c = customers.find(item => item.id === id);
+      if (!c) return;
+
+      pendingDeleteId = id;
+      document.getElementById('deleteTargetInfo').innerHTML = `即將刪除客戶「<strong class="text-slate-800">${escapeHtml(c.name)}</strong>」，刪除後無法復原。`;
+      openModal('deleteModal');
+    };
+
+    // 執行實際刪除
+    function confirmDelete() {
+      if (!pendingDeleteId) return;
+      const targetIndex = customers.findIndex(c => c.id === pendingDeleteId);
+      if (targetIndex !== -1) {
+        const deleted = customers.splice(targetIndex, 1);
+        saveData();
+        renderCustomerList();
+        showToast(`已刪除「${deleted[0].name}」的資料`, 'info');
+      }
+      closeModal('deleteModal');
+      pendingDeleteId = null;
+    }
+
+    // HTML 跳脫防範 XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+
+    // 渲染客戶清單
+    function renderCustomerList() {
+      const listEl = document.getElementById('customerList');
+      const emptyStateEl = document.getElementById('emptyState');
+      const countLabel = document.getElementById('customerCountLabel');
+      const keyword = document.getElementById('searchInput').value.trim().toLowerCase();
+
+      // 篩選
+      const filtered = customers.filter(c => {
+        if (!keyword) return true;
+        const nameMatch = c.name && c.name.toLowerCase().includes(keyword);
+        const addrMatch = c.address && c.address.toLowerCase().includes(keyword);
+        const phoneMatch = c.phone && c.phone.toLowerCase().includes(keyword);
+        const notesMatch = c.notes && c.notes.toLowerCase().includes(keyword);
+        return nameMatch || addrMatch || phoneMatch || notesMatch;
+      });
+
+      // 更新筆數顯示
+      if (keyword) {
+        countLabel.textContent = `搜尋結果：${filtered.length} 筆 (總共 ${customers.length} 筆)`;
+      } else {
+        countLabel.textContent = `共 ${customers.length} 位客戶`;
+      }
+
+      if (filtered.length === 0) {
+        listEl.innerHTML = '';
+        listEl.classList.add('hidden');
+        emptyStateEl.classList.remove('hidden');
+
+        if (keyword) {
+          document.getElementById('emptyTitle').textContent = '找不到符合條件的客戶';
+          document.getElementById('emptyDesc').textContent = `查無包含「${keyword}」的姓名或地址，請嘗試其他關鍵字。`;
+          document.getElementById('btnEmptyAdd').classList.add('hidden');
+        } else {
+          document.getElementById('emptyTitle').textContent = '目前尚無客戶資料';
+          document.getElementById('emptyDesc').textContent = '點擊「新增客戶」按鈕，立即記錄第一筆客戶姓名與地址！';
+          document.getElementById('btnEmptyAdd').classList.remove('hidden');
+        }
+        return;
+      }
+
+      emptyStateEl.classList.add('hidden');
+      listEl.classList.remove('hidden');
+
+      listEl.innerHTML = filtered.map(c => {
+        const navUrl = getGoogleMapsNavigationUrl(c.address);
+        const safeName = escapeHtml(c.name);
+        const safeAddr = escapeHtml(c.address);
+        const safePhone = escapeHtml(c.phone);
+        const safeNotes = escapeHtml(c.notes);
+
+        return `
+          <div class="bg-white rounded-xl shadow-sm border border-slate-200/90 hover:shadow-md transition-all duration-200 p-4 sm:p-5 flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <!-- 客戶主要資料 -->
+            <div class="space-y-2 flex-1 min-w-0">
+              <div class="flex items-center gap-2.5 flex-wrap">
+                <span class="font-bold text-lg text-slate-800 tracking-tight">${safeName}</span>
+                ${safePhone ? `
+                  <a href="tel:${safePhone}" class="inline-flex items-center gap-1 text-xs font-medium text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200/60 px-2.5 py-1 rounded-full transition-colors" title="點擊直接撥打電話">
+                    <svg class="w-3.5 h-3.5 text-emerald-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"/>
+                    </svg>
+                    <span>${safePhone}</span>
+                  </a>
+                ` : ''}
+              </div>
+
+              <!-- 地址資訊 -->
+              <div class="flex items-start gap-2 text-slate-600 text-sm">
+                <svg class="w-4 h-4 text-blue-500 mt-0.5 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"/>
+                </svg>
+                <div class="flex-1 break-words font-medium text-slate-700">
+                  ${safeAddr}
+                  <button onclick="copyAddress('${escapeHtml(c.address)}')" class="inline-flex items-center ml-1.5 text-slate-400 hover:text-slate-600 text-xs px-1.5 py-0.5 rounded bg-slate-100 hover:bg-slate-200 transition-colors" title="複製地址">
+                    <svg class="w-3 h-3 mr-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/>
+                    </svg>
+                    複製
+                  </button>
+                </div>
+              </div>
+
+              <!-- 備註說明 -->
+              ${safeNotes ? `
+                <div class="flex items-center gap-1.5 text-xs text-amber-800 bg-amber-50/80 border border-amber-200/50 rounded-lg px-2.5 py-1.5 w-fit max-w-full">
+                  <svg class="w-3.5 h-3.5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                  </svg>
+                  <span class="truncate">${safeNotes}</span>
+                </div>
+              ` : ''}
+            </div>
+
+            <!-- 操作按鈕群組 -->
+            <div class="flex items-center gap-2 pt-2 md:pt-0 border-t md:border-t-0 border-slate-100 flex-shrink-0">
+              <!-- Google Maps 導航按鈕 (核心功能) -->
+              <a 
+                href="${navUrl}" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                class="flex-1 md:flex-initial inline-flex items-center justify-center gap-1.5 bg-emerald-600 hover:bg-emerald-700 active:bg-emerald-800 text-white font-semibold px-4 py-2.5 rounded-xl shadow-sm transition-all duration-150 text-sm active:scale-95 group"
+                title="開啟 Google Map 開始導航"
+              >
+                <svg class="w-4 h-4 text-emerald-100 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/>
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/>
+                </svg>
+                <span>導航到這</span>
+              </a>
+
+              <!-- 編輯按鈕 -->
+              <button 
+                onclick="editCustomer('${c.id}')"
+                class="p-2.5 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-xl transition-colors border border-slate-200"
+                title="編輯此客戶"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"/>
+                </svg>
+              </button>
+
+              <!-- 刪除按鈕 (核心功能) -->
+              <button 
+                onclick="askDelete('${c.id}')"
+                class="p-2.5 text-rose-500 hover:text-rose-700 hover:bg-rose-50 rounded-xl transition-colors border border-rose-200"
+                title="刪除此客戶資料"
+              >
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/>
+                </svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Modal 控制輔助函式
+    function openModal(id) {
+      document.getElementById(id).classList.remove('hidden');
+    }
+
+    function closeModal(id) {
+      document.getElementById(id).classList.add('hidden');
+    }
+
+    // 事件監聽綁定
+    document.addEventListener('DOMContentLoaded', () => {
+      initData();
+
+      // 新增按鈕
+      const openAddForm = () => {
+        document.getElementById('modalTitle').innerHTML = '<span class="w-2 h-2 rounded-full bg-blue-600"></span> 新增客戶資料';
+        document.getElementById('customerId').value = '';
+        document.getElementById('customerForm').reset();
+        openModal('customerModal');
+        document.getElementById('customerName').focus();
+      };
+
+      document.getElementById('btnOpenAddModal').addEventListener('click', openAddForm);
+      document.getElementById('floatingAddBtn').addEventListener('click', openAddForm);
+      document.getElementById('btnEmptyAdd').addEventListener('click', openAddForm);
+
+      // 關閉 Modal
+      document.getElementById('btnCloseModal').addEventListener('click', () => closeModal('customerModal'));
+      document.getElementById('btnCancelForm').addEventListener('click', () => closeModal('customerModal'));
+
+      // 刪除 Modal 按鈕
+      document.getElementById('btnCancelDelete').addEventListener('click', () => {
+        closeModal('deleteModal');
+        pendingDeleteId = null;
+      });
+      document.getElementById('btnConfirmDelete').addEventListener('click', confirmDelete);
+
+      // 表單提交 (新增 / 更新)
+      document.getElementById('customerForm').addEventListener('submit', (e) => {
+        e.preventDefault();
+        const id = document.getElementById('customerId').value;
+        const name = document.getElementById('customerName').value.trim();
+        const address = document.getElementById('customerAddress').value.trim();
+        const phone = document.getElementById('customerPhone').value.trim();
+        const notes = document.getElementById('customerNotes').value.trim();
+
+        if (!name || !address) {
+          alert('請填寫客戶姓名與地址！');
+          return;
+        }
+
+        if (id) {
+          // 編輯
+          const index = customers.findIndex(c => c.id === id);
+          if (index !== -1) {
+            customers[index] = {
+              ...customers[index],
+              name,
+              address,
+              phone,
+              notes,
+              updatedAt: Date.now()
+            };
+            showToast('客戶資料已更新！');
+          }
+        } else {
+          // 新增
+          const newCustomer = {
+            id: 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+            name,
+            address,
+            phone,
+            notes,
+            createdAt: Date.now()
+          };
+          customers.unshift(newCustomer);
+          showToast('已新增客戶！');
+        }
+
+        saveData();
+        renderCustomerList();
+        closeModal('customerModal');
+      });
+
+      // 搜尋即時過濾
+      const searchInput = document.getElementById('searchInput');
+      const btnClearSearch = document.getElementById('btnClearSearch');
+
+      searchInput.addEventListener('input', () => {
+        if (searchInput.value.trim().length > 0) {
+          btnClearSearch.classList.remove('hidden');
+        } else {
+          btnClearSearch.classList.add('hidden');
+        }
+        renderCustomerList();
+      });
+
+      btnClearSearch.addEventListener('click', () => {
+        searchInput.value = '';
+        btnClearSearch.classList.add('hidden');
+        renderCustomerList();
+        searchInput.focus();
+      });
+
+      // 備份功能 Modal
+      document.getElementById('btnExport').addEventListener('click', () => openModal('backupModal'));
+      document.getElementById('btnCloseBackup').addEventListener('click', () => closeModal('backupModal'));
+
+      // 匯出 JSON
+      document.getElementById('btnExportJSON').addEventListener('click', () => {
+        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(customers, null, 2));
+        const downloadAnchor = document.createElement('a');
+        const dateStr = new Date().toISOString().slice(0, 10);
+        downloadAnchor.setAttribute("href", dataStr);
+        downloadAnchor.setAttribute("download", `客戶地址記錄備份_${dateStr}.json`);
+        document.body.appendChild(downloadAnchor);
+        downloadAnchor.click();
+        downloadAnchor.remove();
+        showToast('備份檔案下載成功！');
+      });
+
+      // 匯入 JSON
+      document.getElementById('fileImport').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          try {
+            const imported = JSON.parse(evt.target.result);
+            if (Array.isArray(imported)) {
+              if (confirm(`確定要匯入 ${imported.length} 筆客戶資料嗎？這將合併到現有清單。`)) {
+                // 合併避免重複 ID
+                const existingIds = new Set(customers.map(c => c.id));
+                let count = 0;
+                imported.forEach(item => {
+                  if (item.name && item.address) {
+                    if (!item.id || existingIds.has(item.id)) {
+                      item.id = 'c_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+                    }
+                    customers.unshift(item);
+                    count++;
+                  }
+                });
+                saveData();
+                renderCustomerList();
+                closeModal('backupModal');
+                showToast(`成功匯入 ${count} 筆客戶資料！`);
+              }
+            } else {
+              alert('檔案格式錯誤：必須是有效的 JSON 客戶陣列。');
+            }
+          } catch (err) {
+            alert('無法讀取檔案，請確認是否為正確的 JSON 備份檔。');
+          }
+        };
+        reader.readAsText(file);
+      });
+    });
+  </script>
+</body>
+</html>
+
